@@ -63,7 +63,7 @@ buster:
     - busterbuild
     - bustertest
     - rabbitmq
-    - mongodb42
+    - mongodb
     - postgres
 
 el7:
