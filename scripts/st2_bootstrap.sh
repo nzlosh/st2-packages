@@ -3,9 +3,12 @@
 BASE_PATH="https://raw.githubusercontent.com/StackStorm/st2-packages"
 BOOTSTRAP_FILE='st2bootstrap.sh'
 
-ARCH=`arch`
-DEBTEST=`lsb_release -a 2> /dev/null | grep Distributor | awk '{print $3}'`
-RHTEST=`cat /etc/redhat-release 2> /dev/null | sed -e "s~\(.*\)release.*~\1~g"`
+ARCH=$(arch)
+# Get distribution id and version id.  Return only the major version because
+# Rocky Linux minor version increases over time, but StackStorm is tested against
+# latest major.minor version only.
+DEBTEST=$(source /etc/os-release; echo ${ID}${VERSION_ID%.*})
+RHTEST=$(source /etc/os-release; echo ${ID}${VERSION_ID%.*})
 VERSION=''
 RELEASE='stable'
 REPO_TYPE=''
@@ -19,79 +22,79 @@ EXTRA_OPTS=''
 BRANCH='v3.8'
 FORCE_BRANCH=""
 
-adddate() {
+function adddate
+{
     while IFS= read -r line; do
         echo "$(date +%Y%m%dT%H%M%S%z) $line"
     done
 }
+function validate_branch_version
+{
+    local VERSION="$1"
+    if [[ -n "$VERSION" ]]; then
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+dev$ ]]; then
+            echo "$VERSION does not match supported formats x.y.z or x.ydev"
+            exit 1
+        fi
 
-setup_args() {
+        if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+dev$ ]]; then
+            echo "You're requesting a dev version! Switching to unstable!"
+            export RELEASE='unstable'
+        fi
+    fi
+}
+function setup_args
+{
   for i in "$@"
     do
       case $i in
           -v=*|--version=*)
-          VERSION="${i#*=}"
-          shift
-          ;;
+              VERSION="${i#*=}"
+              shift
+              ;;
           -s|--stable)
-          RELEASE=stable
-          shift
-          ;;
+              RELEASE=stable
+              shift
+              ;;
           -u|--unstable)
-          RELEASE=unstable
-          shift
-          ;;
+              RELEASE=unstable
+              shift
+              ;;
           --staging)
-          REPO_TYPE='staging'
-          shift
-          ;;
+              REPO_TYPE='staging'
+              shift
+              ;;
           # Used to install the packages from CircleCI build artifacts
           # Examples: 'st2/5017', 'mistral/1012', 'st2-packages/3021',
           # where first part is repository name, second is CircleCI build number.
           --dev=*)
-          DEV_BUILD="${i#*=}"
-          shift
-          ;;
+              DEV_BUILD="${i#*=}"
+              shift
+              ;;
           --user=*)
-          USERNAME="${i#*=}"
-          shift
-          ;;
+              USERNAME="${i#*=}"
+              shift
+              ;;
           --password=*)
-          PASSWORD="${i#*=}"
-          shift
-          ;;
+              PASSWORD="${i#*=}"
+              shift
+              ;;
           # Used to specify which branch of st2-packages repo to use. This comes handy when you
           # need to use a non-master branch of st2-package repo (e.g. when testing installer script
           # changes which are in a branch)
           --force-branch=*)
-          FORCE_BRANCH="${i#*=}"
-          shift
-          ;;
-          # Provide a flag to enable installing Python3 from 3rd party insecure PPA for Ubuntu Xenial
-          # TODO: Remove once Ubuntu Xenial is dropped
-          --u16-add-insecure-py3-ppa)
-          EXTRA_OPTS="--u16-add-insecure-py3-ppa"
-          shift
-          ;;
+              FORCE_BRANCH="${i#*=}"
+              shift
+              ;;
           *)
           # unknown option
           ;;
       esac
     done
 
-  if [[ "$VERSION" != '' ]]; then
-    if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+dev$ ]]; then
-      echo "$VERSION does not match supported formats x.y.z or x.ydev"
-      exit 1
-    fi
+  validate_branch_version "$VERSION"
 
-    if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+dev$ ]]; then
-     echo "You're requesting a dev version! Switching to unstable!"
-     RELEASE='unstable'
-    fi
-  fi
-
-  if [[ "$USERNAME" = '' || "$PASSWORD" = '' ]]; then
+  if [[ -z "$USERNAME" || -z "$PASSWORD" ]]; then
     USERNAME=${USERNAME:-st2admin}
     PASSWORD=${PASSWORD:-Ch@ngeMe}
     echo "You can use \"--user=<CHANGEME>\" and \"--password=<CHANGEME>\" to override following default st2 credentials."
@@ -102,6 +105,14 @@ setup_args() {
     sleep ${SLEEP_TIME}
     echo "Resorting to default username and password... You have an option to change password later!"
   fi
+}
+function validate_architecture
+{
+    local ARCH="$1"
+    if [[ "$ARCH" != 'x86_64' ]]; then
+        echo "Abort: unsupported architecture $ARCH!  Please use an x86 64-bit architecture."
+        exit 2
+    fi
 }
 
 setup_args $@
@@ -115,7 +126,7 @@ if [[ "$REPO_TYPE" == 'staging' ]]; then
   BRANCH="master"
 fi
 
-if [[ "$DEV_BUILD" != '' ]]; then
+if [[ -n "$DEV_BUILD" ]]; then
   BRANCH="master"
 fi
 
@@ -125,35 +136,34 @@ get_version_branch() {
   fi
 }
 
-if [[ "$VERSION" != '' ]]; then
-  get_version_branch $VERSION
-  VERSION="--version=${VERSION}"
-fi
+function make_required_flags
+{
+	# Order of required flags ${VERSION} ${RELEASE} ${REPO_TYPE} ${DEV_BUILD} ${USERNAME} ${PASSWORD}
+	export REQUIRED_FLAGS=""
+	if [[ -n "$VERSION" ]]; then
+		get_version_branch $VERSION
+		REQUIRED_FLAGS = "$REQUIRED_FLAGS --version=${VERSION}"
+	fi
 
-if [[ "$RELEASE" != '' ]]; then
-  RELEASE="--${RELEASE}"
-fi
+	if [[ -n "$RELEASE" ]]; then
+		REQUIRED_FLAGS = "$REQUIRED_FLAGS --${RELEASE}"
+	fi
 
-if [[ "$REPO_TYPE" == 'staging' ]]; then
-  REPO_TYPE="--staging"
-fi
+	if [[ "$REPO_TYPE" == 'staging' ]]; then
+		REQUIRED_FLAGS = "$REQUIRED_FLAGS --staging"
+	fi
 
-if [[ "$DEV_BUILD" != '' ]]; then
-  DEV_BUILD="--dev=${DEV_BUILD}"
-fi
+	if [[ -n "$DEV_BUILD" ]]; then
+		REQUIRED_FLAGS = "$REQUIRED_FLAGS --dev=${DEV_BUILD}"
+	fi
 
-if [[ "${FORCE_BRANCH}" != "" ]]; then
-  BRANCH=${FORCE_BRANCH}
-fi
+	REQUIRED_FLAGS = "$REQUIRED_FLAGS --user=${USERNAME}"
+	REQUIRED_FLAGS = "$REQUIRED_FLAGS --password=${PASSWORD}"
+}
+validate_architecture "$ARCH"
 
-USERNAME="--user=${USERNAME}"
-PASSWORD="--password=${PASSWORD}"
 
-if [[ "$ARCH" != 'x86_64' ]]; then
-  echo "Unsupported architecture. Please use a 64-bit OS! Aborting!"
-  exit 2
-fi
-
+	
 if [[ -n "$RHTEST" ]]; then
   TYPE="rpms"
   echo "*** Detected Distro is ${RHTEST} ***"
@@ -201,6 +211,6 @@ else
     echo "OS specific script cmd: bash ${BOOTSTRAP_FILE} ${VERSION} ${RELEASE} ${REPO_TYPE} ${DEV_BUILD} ${USERNAME} --password=****"
     TS=$(date +%Y%m%dT%H%M%S)
     sudo mkdir -p /var/log/st2
-    bash ${BOOTSTRAP_FILE} ${VERSION} ${RELEASE} ${REPO_TYPE} ${DEV_BUILD} ${USERNAME} ${PASSWORD} ${EXTRA_OPTS} 2>&1 | adddate | sudo tee /var/log/st2/st2-install.${TS}.log
+    bash ${BOOTSTRAP_FILE} ${REQUIRED_FLAGS} ${EXTRA_OPTS} 2>&1 | adddate | sudo tee /var/log/st2/st2-install.${TS}.log
     exit ${PIPESTATUS[0]}
 fi
