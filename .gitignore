@@ -26,6 +26,9 @@ develop-eggs
 lib64
 virtualenv
 
+# Pants
+.pants.d
+
 # Installer logs
 pip-log.txt
 

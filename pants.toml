@@ -1,0 +1,9 @@
+[GLOBAL]
+pants_version = "2.22.0"
+
+# pants to use docker for testing?
+backend_packages = [
+	"pants.backend.python",
+	"pants.backend.docker",
+	"pants.backend.shell",
+]
