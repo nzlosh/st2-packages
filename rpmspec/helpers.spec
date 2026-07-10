@@ -25,7 +25,7 @@
           done \
 %{nil}
 
-# We hate duplication right :)?, so let's use debian files
+# We hate duplication right :)?, so let's use debian files # 2026 FIX: Nothing justifies crossing platform build tools metadata!
 %define default_install \
   %debian_dirs \
   %debian_install \
@@ -34,12 +34,12 @@
 %{nil}
 
 # Find a supported version of Python.
-%define pyexecutable %(export PYEXEC=""; for pyv in 3.{11..8}; do PYEXEC=$(command -v python$pyv); test -n "$PYEXEC" && basename $PYEXEC && break; done)
+%define pyexecutable %(export PYEXEC=""; for pyv in 3.{12..10}; do PYEXEC=$(command -v python$pyv); test -n "$PYEXEC" && basename $PYEXEC && break; done)
 
 ## Clean up RECORD and some other files left by python, which may contain
 #   absolute buildroot paths.
 %define cleanup_python_abspath \
-  find %{buildroot} -name RECORD -o -name '*.egg-link' -o -name '*.pth' | \
+  find %{buildroot} -name RECORD -o -name '*.egg-link' -o -name '*.pth' -o -name 'pyvenv.cfg' | \
       xargs -I{} -n1 sed -i 's@%{buildroot}@@' {} \
 %{nil}
 
