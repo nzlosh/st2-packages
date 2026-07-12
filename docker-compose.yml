@@ -1,6 +1,6 @@
 services:
   jammy:
-    image: quay.io/stackstorm/packagingrunner
+    image: stackstorm/packagingrunner:latest
     extends:
       file: docker-compose.override.yml
       service: suite-compose
@@ -16,7 +16,7 @@ services:
       - redis
 
   noble:
-    image: quay.io/stackstorm/packagingrunner
+    image: stackstorm/packagingrunner:latest
     extends:
       file: docker-compose.override.yml
       service: suite-compose
@@ -32,7 +32,7 @@ services:
       - redis
 
   el9:
-    image: quay.io/stackstorm/packagingrunner
+    image: stackstorm/packagingrunner:latest
     extends:
       file: docker-compose.override.yml
       service: suite-compose
@@ -47,34 +47,50 @@ services:
       - mongodb
       - redis
 
+  el10:
+    image: stackstorm/packagingrunner:latest
+    extends:
+      file: docker-compose.override.yml
+      service: suite-compose
+    environment:
+      - BUILDNODE=rockylinux10build
+      - TESTNODE=rockylinux10test
+      - ST2_PACKAGES=st2
+    links:
+      - rockylinux10build
+      - rockylinux10test
+      - rabbitmq
+      - mongodb
+      - redis
+
   ## Package build nodes
   jammybuild:
-    #~ image: stackstorm/packagingbuild:jammy
-    image: jammy-build
+    image: stackstorm/packagingbuild:jammy
     extends:
       file: docker-compose.override.yml
       service: volumes-compose
 
   noblebuild:
-    #~ image: stackstorm/packagingbuild:noble
-    image: noble-build
+    image: stackstorm/packagingbuild:noble
     extends:
       file: docker-compose.override.yml
       service: volumes-compose
 
   rockylinux9build:
-    #~ image: stackstorm/packagingbuild:rockylinux9
-    image: rockylinux9-build
-    environment:
-      ST2_GITREV: "pull/6367"
+    image: stackstorm/packagingbuild:rockylinux9
+    extends:
+      file: docker-compose.override.yml
+      service: volumes-compose
+
+  rockylinux10build:
+    image: stackstorm/packagingbuild:rockylinux10
     extends:
       file: docker-compose.override.yml
       service: volumes-compose
 
   ## Package testing nodes
   jammytest:
-    #~ image: stackstorm/packagingtest:jammy-systemd
-    image: jammy-test
+    image: stackstorm/packagingtest:jammy
     privileged: true
     cgroup: host
     extends:
@@ -84,8 +100,7 @@ services:
       - /sys/fs/cgroup:/sys/fs/cgroup
 
   nobletest:
-    #~ image: stackstorm/packagingtest:noble-systemd
-    image: noble-test
+    image: stackstorm/packagingtest:noble
     privileged: true
     cgroup: host
     extends:
@@ -95,8 +110,21 @@ services:
       - /sys/fs/cgroup:/sys/fs/cgroup
 
   rockylinux9test:
-    #~ image: stackstorm/packagingtest:rockylinux9-systemd
-    image: rockylinux9-test
+    image: stackstorm/packagingtest:rockylinux9
+    privileged: true
+    cgroup: host
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    extends:
+      file: docker-compose.override.yml
+      service: volumes-compose
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+
+  rockylinux10test:
+    image: stackstorm/packagingtest:rockylinux10
     privileged: true
     cgroup: host
     cap_add:
