@@ -1,23 +1,27 @@
 #!/usr/bin/make -f
-# DH_VERBOSE = 1
+DH_VERBOSE = 1
 
 # see EXAMPLES in dpkg-buildflags(1) and read /usr/share/dpkg/*
-#DPKG_EXPORT_BUILDFLAGS = 1
+DPKG_EXPORT_BUILDFLAGS = 1
 #include /usr/share/dpkg/default.mk
 
 # Virtualenv and pip should be updated (better not to use the distro defaults).
 # Updated ones can be found under /use/local.
+SHELL=/bin/bash
 PATH = /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WHEELDIR ?= /tmp/wheelhouse
 DH_VIRTUALENV_INSTALL_ROOT := /opt/stackstorm
 export DH_VIRTUALENV_INSTALL_ROOT
-PIP_VERSION = 25.3
+PIP_VERSION = 26.1.2
 
 IS_SYSTEMD = $(shell command -v dh_systemd_enable > /dev/null 2>&1 && echo true)
-DEB_DISTRO := $(shell lsb_release -cs)
+DEB_DISTRO := $(shell source /etc/os-release; echo $$VERSION_CODENAME)
 
 BUILD_PRE_DEPENDS := python3
-BUILD_DEPENDS := python3-distutils, python3-dev
+BUILD_DEPENDS := python3-dev, python3-lib2to3
+ifneq ($(DEB_DISTRO),noble)
+BUILD_DEPENDS := python3-distutils, $(BUILD_DEPENDS)
+endif
 
 %:
 	dh $@ --with python-virtualenv --python /usr/bin/python3
@@ -35,7 +39,7 @@ override_dh_gencontrol:
 # We have many, and so force it to install multiple service files
 override_dh_installinit:
 	dh_systemd_enable --name=st2actionrunner st2actionrunner.service
-	install -p -m644 debian/st2actionrunner@.service debian/st2/lib/systemd/system/st2actionrunner@.service
+	install -Dp -m644 debian/st2actionrunner@.service debian/st2/lib/systemd/system/st2actionrunner@.service
 	dh_systemd_enable --name=st2api st2api.service
 	dh_systemd_enable --name=st2stream st2stream.service
 	dh_systemd_enable --name=st2auth st2auth.service
@@ -54,17 +58,22 @@ override_dh_installdeb:
 override_dh_virtualenv:
 	# NB! Wheels must be pre-populated by now, we use --no-index to skip
 	# querying pypi and rely only on --find-links.
-	#
 	# NB! Use '--no-download' arg for 'virtualenv' is required,
 	# otherwise it downloads latest PIP version instead of bundled/pinned one.
 	# NB! Use '--copies' else /opt/stackstorm/st2/bin/python is symlink to
 	# /usr/bin/pythonx rather than copy - and this breaks pack install
 	# which follows the path to calculate the location of the bin directory
-
-	dh_virtualenv --extra-virtualenv-arg='--copies' --extra-virtualenv-arg='--no-download' \
-								'--upgrade-pip-to=$(PIP_VERSION)' \
-								--extra-pip-arg '--find-links=$(WHEELDIR)' \
-								--extra-pip-arg '--no-index' --no-test
+	dh_virtualenv \
+		'--upgrade-pip-to=$(PIP_VERSION)' \
+		--extra-virtualenv-arg='--copies' \
+		--extra-virtualenv-arg='--no-download' \
+		--extra-pip-arg '--find-links=$(WHEELDIR)' \
+		--extra-pip-arg '--no-index'
 
 override_dh_compress:
 	dh_compress -X.conf
+
+override_dh_strip_nondeterminism:
+	# Exclude .whl: virtualenv hardcodes sha256 of its embedded seed wheels,
+	# and normalizing them here breaks that check.
+	dh_strip_nondeterminism -X.whl

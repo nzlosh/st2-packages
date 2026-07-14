@@ -6,37 +6,28 @@
 
 %include ../rpmspec/st2pkg_toptags.spec
 
+# default Python3 version.
+%define pyver 3
+
+# Building st2 v3.10 on rocky9 is forced to py3.11 instead of default py3.9
+%if 0%{?rhel} == 9
+%define pyver 3.11
+%endif
+
 %if 0%{?epoch}
 Epoch: %{epoch}
 %endif
 
-%if 0%{?rhel} == 8
-%global _build_id_links none
-%endif
-
 Requires: openssl-devel, libffi-devel, git, pam, openssh-server, openssh-clients, bash, setup
-%if 0%{?rhel} == 8
-Requires: python38-devel
-%endif
+Requires: python%{pyver}-devel
+
+BuildRequires: python%{pyver}-devel
+BuildRequires: python%{pyver}-setuptools
 %if 0%{?rhel} == 9
-Requires: python3-devel
+BuildRequires: python%{pyver}
+BuildRequires: python%{pyver}-pip
 %endif
 
-# EL8 requires a few python packages available within 'BUILDROOT' when outside venv
-# These are in the el8 packagingbuild dockerfile
-# Reference https://fossies.org/linux/ansible/packaging/rpm/ansible.spec
-%if 0%{?rhel} == 8
-# Will use the python3 stdlib venv
-BuildRequires: python38-devel
-BuildRequires: python38-setuptools
-%endif
-%if 0%{?rhel} == 9
-BuildRequires: python3-devel
-BuildRequires: python3-setuptools
-%endif
-
-# Apply this to both RHEL 8 and RHEL 9
-%if 0%{?rhel} > 7
 # By default the RPM helper scripts will try to generate Requires: section which lists every
 # Python dependencies. That process / script works by recursively scanning all the package Python
 # dependencies which is very slow (5-6 minutes).
@@ -51,7 +42,6 @@ BuildRequires: python3-setuptools
 %undefine __pythondist_requires
 %undefine __python_provides
 %undefine __python_requires
-%endif
 
 Summary: StackStorm all components bundle
 Conflicts: st2common

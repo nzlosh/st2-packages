@@ -1,6 +1,6 @@
 services:
   jammy:
-    image: quay.io/stackstorm/packagingrunner
+    image: stackstorm/packagingrunner:latest
     working_dir: /root/st2-packages
     volumes_from:
       - container:st2-packages-vol
@@ -15,8 +15,24 @@ services:
       - mongodb
       - redis
 
+  noble:
+    image: stackstorm/packagingrunner:latest
+    working_dir: /root/st2-packages
+    volumes_from:
+      - container:st2-packages-vol
+    environment:
+      - BUILDNODE=noblebuild
+      - TESTNODE=nobletest
+      - ST2_PACKAGES=st2
+    links:
+      - noblebuild
+      - nobletest
+      - rabbitmq
+      - mongodb
+      - redis
+
   el9:
-    image: quay.io/stackstorm/packagingrunner
+    image: stackstorm/packagingrunner:latest
     working_dir: /root/st2-packages
     volumes_from:
       - container:st2-packages-vol
@@ -30,9 +46,29 @@ services:
       - mongodb
       - redis
 
+  el10:
+    image: stackstorm/packagingrunner:latest
+    working_dir: /root/st2-packages
+    volumes_from:
+      - container:st2-packages-vol
+    environment:
+      - BUILDNODE=rockylinux10build
+      - TESTNODE=rockylinux10test
+    links:
+      - rockylinux10build
+      - rockylinux10test
+      - rabbitmq
+      - mongodb
+      - redis
+
   ## Package build nodes
   jammybuild:
     image: stackstorm/packagingbuild:jammy
+    volumes_from:
+      - container:st2-packages-vol
+
+  noblebuild:
+    image: stackstorm/packagingbuild:noble
     volumes_from:
       - container:st2-packages-vol
 
@@ -41,9 +77,23 @@ services:
     volumes_from:
       - container:st2-packages-vol
 
+  rockylinux10build:
+    image: stackstorm/packagingbuild:rockylinux10
+    volumes_from:
+      - container:st2-packages-vol
+
   ## Package testing nodes
   jammytest:
-    image: stackstorm/packagingtest:jammy-systemd
+    image: stackstorm/packagingtest:jammy
+    privileged: true
+    cgroup: host
+    volumes_from:
+      - container:st2-packages-vol
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+
+  nobletest:
+    image: stackstorm/packagingtest:noble
     privileged: true
     cgroup: host
     volumes_from:
@@ -52,7 +102,20 @@ services:
       - /sys/fs/cgroup:/sys/fs/cgroup
 
   rockylinux9test:
-    image: stackstorm/packagingtest:rockylinux9-systemd
+    image: stackstorm/packagingtest:rockylinux9
+    privileged: true
+    cgroup: host
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    volumes_from:
+      - container:st2-packages-vol
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+
+  rockylinux10test:
+    image: stackstorm/packagingtest:rockylinux10
     privileged: true
     cgroup: host
     cap_add:

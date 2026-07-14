@@ -1,6 +1,6 @@
 services:
   jammy:
-    image: quay.io/stackstorm/packagingrunner
+    image: stackstorm/packagingrunner:latest
     extends:
       file: docker-compose.override.yml
       service: suite-compose
@@ -15,8 +15,24 @@ services:
       - mongodb
       - redis
 
+  noble:
+    image: stackstorm/packagingrunner:latest
+    extends:
+      file: docker-compose.override.yml
+      service: suite-compose
+    environment:
+      - BUILDNODE=noblebuild
+      - TESTNODE=nobletest
+      - ST2_PACKAGES=st2
+    links:
+      - noblebuild
+      - nobletest
+      - rabbitmq
+      - mongodb
+      - redis
+
   el9:
-    image: quay.io/stackstorm/packagingrunner
+    image: stackstorm/packagingrunner:latest
     extends:
       file: docker-compose.override.yml
       service: suite-compose
@@ -31,9 +47,31 @@ services:
       - mongodb
       - redis
 
+  el10:
+    image: stackstorm/packagingrunner:latest
+    extends:
+      file: docker-compose.override.yml
+      service: suite-compose
+    environment:
+      - BUILDNODE=rockylinux10build
+      - TESTNODE=rockylinux10test
+      - ST2_PACKAGES=st2
+    links:
+      - rockylinux10build
+      - rockylinux10test
+      - rabbitmq
+      - mongodb
+      - redis
+
   ## Package build nodes
   jammybuild:
     image: stackstorm/packagingbuild:jammy
+    extends:
+      file: docker-compose.override.yml
+      service: volumes-compose
+
+  noblebuild:
+    image: stackstorm/packagingbuild:noble
     extends:
       file: docker-compose.override.yml
       service: volumes-compose
@@ -44,9 +82,25 @@ services:
       file: docker-compose.override.yml
       service: volumes-compose
 
+  rockylinux10build:
+    image: stackstorm/packagingbuild:rockylinux10
+    extends:
+      file: docker-compose.override.yml
+      service: volumes-compose
+
   ## Package testing nodes
   jammytest:
-    image: stackstorm/packagingtest:jammy-systemd
+    image: stackstorm/packagingtest:jammy
+    privileged: true
+    cgroup: host
+    extends:
+      file: docker-compose.override.yml
+      service: volumes-compose
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+
+  nobletest:
+    image: stackstorm/packagingtest:noble
     privileged: true
     cgroup: host
     extends:
@@ -56,7 +110,21 @@ services:
       - /sys/fs/cgroup:/sys/fs/cgroup
 
   rockylinux9test:
-    image: stackstorm/packagingtest:rockylinux9-systemd
+    image: stackstorm/packagingtest:rockylinux9
+    privileged: true
+    cgroup: host
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    extends:
+      file: docker-compose.override.yml
+      service: volumes-compose
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+
+  rockylinux10test:
+    image: stackstorm/packagingtest:rockylinux10
     privileged: true
     cgroup: host
     cap_add:

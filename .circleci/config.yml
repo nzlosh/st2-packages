@@ -8,7 +8,7 @@ version: 2
 jobs:
   # Build & Test st2 packages
   packages:
-    parallelism: 2
+    parallelism: 4
     # 4CPUs & 8GB RAM CircleCI machine
     # sadly, it doesn't work with 'setup_remote_docker'
     resource_class: large
@@ -17,7 +17,7 @@ jobs:
       - image: cimg/python:3.10
     working_directory: ~/st2-packages
     environment:
-      DISTROS: "jammy el9"
+      DISTROS: "jammy noble el9 el10"
       BASH_ENV: ~/.buildenv
       # These should be set to an empty string, so that st2cd prep tasks are able to replace these
       # with real gitrevs during releases. Note that they are commented out, so that they do not interfere
@@ -82,25 +82,26 @@ jobs:
             docker cp ~/st2-packages st2-packages-vol:/root
       - run:
           name: Pull dependent Docker Images
-          command: .circle/docker-compose.sh pull ${DISTRO} || .circle/docker-compose.sh pull ${DISTRO}
+          command: |
+            .circle/docker-compose.sh pull ${DISTRO} || .circle/docker-compose.sh pull ${DISTRO}
       - run:
           name: Build the ${DISTRO} Packages
           command: |
             # Create necessary directories
             mkdir -p ~/st2-packages/build/${DISTRO}/log/
-
             # Run the build
             .circle/docker-compose.sh build ${DISTRO}
-
             # Once build container finishes we can copy packages directly from it
             docker cp st2-packages-vol:/root/build/. ~/st2-packages/build/${DISTRO}
       - run:
           name: Test the Packages
-          command: .circle/docker-compose.sh test ${DISTRO}
+          command: |
+            .circle/docker-compose.sh test ${DISTRO}
       - run:
           when: always
           name: Grab the st2 logs
-          command: docker cp st2-packages-vol:/var/log/st2 ~/st2-packages/build/${DISTRO}/log/st2
+          command: |
+            docker cp st2-packages-vol:/var/log/st2 ~/st2-packages/build/${DISTRO}/log/st2
       - store_artifacts:
           path: ~/st2-packages/build
           destination: packages
@@ -131,13 +132,14 @@ jobs:
       - image: cimg/ruby:2.7
     working_directory: /tmp/deploy
     environment:
-      - DISTROS: "jammy el9"
+      - DISTROS: "jammy noble el9 el10"
     steps:
       - attach_workspace:
           at: .
       - run:
           name: List workspace files
-          command: find . | sed 's|[^/]*/|  |g'
+          command: |
+            find . | sed 's|[^/]*/|  |g'
       - run:
           name: Install dependencies
           command: |

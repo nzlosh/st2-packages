@@ -1,46 +1,53 @@
+SHELL=/bin/bash
 WHEELDIR ?= /tmp/wheelhouse
 ST2_COMPONENT := $(notdir $(CURDIR))
 ST2PKG_RELEASE ?= 1
 
-ifneq (,$(wildcard /etc/debian_version))
-	DEBIAN := 1
-	DEB_DISTRO := $(shell lsb_release -cs)
+OS_ID := $(shell source /etc/os-release; echo $$ID)
+# Major OS version is sufficient.
+OS_VERSION := $(shell source /etc/os-release; echo $${VERSION_ID%.*})
+
+PYBIN := python3
+PIPBIN := pip3
+
+ifeq ($(OS_ID),rocky)
+	EL_VERSION := $(OS_VERSION)
+	# Rocky9 requires py3.11 instead of default py3.9 interpreter.
+	ifeq ($(OS_VERSION),9)
+		PYBIN = python3.11
+	endif
+else ifeq ($(OS_ID),rhel)
+	EL_VERSION := $(OS_VERSION)
+else ifeq ($(OS_ID),ubuntu)
+	DEB_DISTRO := $(shell source /etc/os-release; echo $$VERSION_CODENAME)
 	DESTDIR ?= $(CURDIR)/debian/$(ST2_COMPONENT)
-else ifneq (,$(wildcard /etc/rocky-release))
-	EL_DISTRO := rocky
-	EL_VERSION := $(shell cat /etc/rocky-release | grep -oP '(?<= )[0-9]+(?=\.)')
-	REDHAT := 1
-else ifneq (,$(wildcard /etc/redhat-release))
-	EL_DISTRO := redhat
-	EL_VERSION := $(shell cat /etc/redhat-release | grep -oP '(?<= )[0-9]+(?=\.)')
-	REDHAT := 1
+else ifeq ($(OS_ID),debian)
+	DEB_DISTRO := $(shell source /etc/os-release; echo $$VERSION_CODENAME)
+	DESTDIR ?= $(CURDIR)/debian/$(ST2_COMPONENT)
 else
-	REDHAT := 1
-	DEB_DISTRO := unstable
+	echo "$(OS_ID) is not supported."
+	exit 1
 endif
 
-PYTHON_BINARY := /usr/bin/python3
-PIP_BINARY := pip3
-PYTHON_ALT_BINARY := python3
 
 # Moved from top of file to handle when only py2 or py3 available
-ST2PKG_VERSION ?= $(shell $(PYTHON_BINARY) -c "from $(ST2_COMPONENT) import __version__; print(__version__),")
+ST2PKG_VERSION ?= $(shell $(PYBIN) -c "from $(ST2_COMPONENT) import __version__; print(__version__),")
 
 # Note: We dynamically obtain the version, this is required because dev
 # build versions don't store correct version identifier in __init__.py
 # and we need setup.py to normalize it (e.g. 1.4dev -> 1.4.dev0)
-ST2PKG_NORMALIZED_VERSION ?= $(shell $(PYTHON_BINARY) setup.py --version || echo "failed_to_retrieve_version")
+ST2PKG_NORMALIZED_VERSION ?= $(shell $(PYBIN) setup.py --version || echo "failed_to_retrieve_version")
 
 .PHONY: info
 info:
-	@echo "DEBIAN=$(DEBIAN)"
-	@echo "REDHAT=$(REDHAT)"
 	@echo "DEB_DISTRO=$(DEB_DISTRO)"
-	@echo "PYTHON_BINARY=$(PYTHON_BINARY)"
-	@echo "PIP_BINARY=$(PIP_BINARY)"
+	@echo "DESTDIR=$(DESTDIR)"
 	@echo "EL_VERSION=$(EL_VERSION)"
-	@echo "EL_DISTRO=$(EL_DISTRO)"
-	$(PIP_BINARY) --version
+	@echo "PYTHON_BINARY=$(PYBIN)"
+	@echo "PIP_BINARY=$(PIPBIN)"
+	@$(PYBIN) --version
+	@$(PIPBIN) --version
+
 
 .PHONY: populate_version requirements wheelhouse bdist_wheel
 all: info populate_version requirements bdist_wheel
@@ -53,7 +60,7 @@ populate_version: .stamp-populate_version
 
 requirements: .stamp-requirements
 .stamp-requirements:
-	$(PYTHON_BINARY) ../scripts/fixate-requirements.py -s in-requirements.txt -f ../fixed-requirements.txt
+	$(PYBIN) ../scripts/fixate-requirements.py -s in-requirements.txt -f ../fixed-requirements.txt
 	cat requirements.txt
 
 wheelhouse: .stamp-wheelhouse
@@ -61,20 +68,16 @@ wheelhouse: .stamp-wheelhouse
 	# Install wheels into shared location
 	cat requirements.txt
 	# Try to install wheels 2x in case the first one fails
-	$(PIP_BINARY) --use-deprecated=legacy-resolver wheel --wheel-dir=$(WHEELDIR) --find-links=$(WHEELDIR) -r requirements.txt || \
-		$(PIP_BINARY) --use-deprecated=legacy-resolver wheel --wheel-dir=$(WHEELDIR) --find-links=$(WHEELDIR) -r requirements.txt
+	$(PIPBIN) wheel --wheel-dir=$(WHEELDIR) --find-links=$(WHEELDIR) -r requirements.txt || \
+	$(PIPBIN) wheel --wheel-dir=$(WHEELDIR) --find-links=$(WHEELDIR) -r requirements.txt
 	touch $@
 
 bdist_wheel: .stamp-bdist_wheel
 .stamp-bdist_wheel: | populate_version requirements inject-deps
 	cat requirements.txt
-# We need to install these python packages to handle rpmbuild 4.14 in EL8
-ifeq ($(EL_VERSION),8)
-	$(PIP_BINARY) install wheel setuptools virtualenv
-	$(PIP_BINARY) install cryptography
-endif
-	$(PYTHON_BINARY) setup.py bdist_wheel -d $(WHEELDIR) || \
-		$(PYTHON_BINARY) setup.py bdist_wheel -d $(WHEELDIR)
+
+	$(PYBIN) -m build --wheel --outdir $(WHEELDIR) || \
+	$(PYBIN) -m build --wheel --outdir $(WHEELDIR)
 	touch $@
 
 # Note: We want to dynamically inject "st2client" dependency. This way we can
