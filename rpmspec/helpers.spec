@@ -73,11 +73,10 @@
 %{nil}
 
 # Install systemd service into the package
-#
 %define service_install() \
   for svc in %{?*}; do \
-    install -D -p -m0644 %{SOURCE0}/rpm/$svc.service %{buildroot}%{_unitdir}/$svc.service \
-    [ -f %{SOURCE0}/rpm/$svc.socket ] && install -D -p -m0644 %{SOURCE0}/rpm/$svc.socket %{buildroot}%{_unitdir}/$svc.socket \
+    test -f %{SOURCE0}/rpm/$svc.service && install -D -p -m0644 %{SOURCE0}/rpm/$svc.service %{buildroot}%{_unitdir}/$svc.service \
+    test -f %{SOURCE0}/rpm/$svc.socket && install -D -p -m0644 %{SOURCE0}/rpm/$svc.socket %{buildroot}%{_unitdir}/$svc.socket \
   done \
 %{nil}
 
